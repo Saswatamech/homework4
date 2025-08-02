@@ -152,7 +152,37 @@ def extract_kart_objects(
         - is_center_kart: Boolean indicating if this is the kart closest to image center
     """
 
-    raise NotImplementedError("Not implemented")
+    #raise NotImplementedError("Not implemented")
+
+    with open(info_path, 'r') as f:
+        info_data = json.load(f)
+
+    kart_names = info_data['karts']
+    frame_detections = info_data['detections'][view_index]
+
+    kart_objects = []
+
+    for detection in frame_detections:
+        class_id, track_id, x1, y1, x2, y2 = detection
+
+        # Only consider kart objects (class_id 1)
+        if class_id == 1:
+            # Calculate center point
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
+            # Check if the kart is within the image boundaries
+            if 0 <= center_x <= img_width and 0 <= center_y <= img_height:
+                kart_object = {
+                    'instance_id': track_id,
+                    'kart_name': kart_names[track_id] if track_id < len(kart_names) else 'Unknown',
+                    'center': (center_x, center_y),
+                    'is_ego_car': track_id == 0,
+                    'bbox': [x1, y1, x2, y2]
+                }
+                kart_objects.append(kart_object)
+
+    return kart_objects
 
 
 def extract_track_info(info_path: str) -> str:
@@ -165,8 +195,13 @@ def extract_track_info(info_path: str) -> str:
     Returns:
         Track name as a string
     """
+    with open(info_path, 'r') as f:
+        data = json.load(f)
 
-    raise NotImplementedError("Not implemented")
+    # Accessing elements
+    #track = data['track']
+    return data.get('track', 'Unknown Track')
+    #raise NotImplementedError("Not implemented")
 
 
 def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img_height: int = 100) -> list:
@@ -202,10 +237,159 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
     # How many karts are in front of the ego car?
     # How many karts are behind the ego car?
 
-    raise NotImplementedError("Not implemented")
+    #raise NotImplementedError("Not implemented")
+    qa_pairs = []
+    kart_objects = extract_kart_objects(info_path, view_index, img_width, img_height)
+
+    #Load info file to get kart names and track name
+    with open(info_path, 'r') as f:
+        info_data = json.load(f)
+    all_kart_names = info_data.get('karts', [])
+    track_name = info_data.get('track', 'Unknown Track')
+
+    # Get the image file name for the current view
+    info_path_obj = Path(info_path)
+    base_name = info_path_obj.stem.replace("_info", "")
+    image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
+
+    # Identify the ego car
+    ego_car_object = next((k for k in kart_objects if k['is_ego_car']), None)
+
+    if not ego_car_object:
+        # If ego car is not found in the view, we can't generate relative questions
+        # but we can still answer other questions.
+
+        # 1. Ego car question (handle case where ego car is not visible)
+        ego_car_name = all_kart_names[0] if len(all_kart_names) > 0 else "an unknown kart"
+        qa_pairs.append({
+            'question': 'What kart is the ego car?',
+            'answer': f'The ego car is {ego_car_name}.',
+            'image_file': image_file_path
+        })
+
+        # 2. Total karts question
+        qa_pairs.append({
+            'question': 'How many karts are there in the scenario?',
+            'answer': f'There are {len(all_kart_names)} karts in total.',
+            'image_file': image_file_path
+        })
+
+        # 3. Track information question
+        qa_pairs.append({
+            'question': 'What track is this?',
+            'answer': f'This is the {track_name} track.',
+            'image_file': image_file_path
+        })
+
+        # No relative questions can be generated without the ego car in the frame
+        return qa_pairs
+
+    ego_car_name = ego_car_object['kart_name']
+    ego_car_center_x, ego_car_center_y = ego_car_object['center']
+    #ego_track_id = ego_car_object['instance_id']
+
+    # 1. Ego car question
+    qa_pairs.append({
+        'question': 'What kart is the ego car?',
+        'answer': ego_car_name,
+        'image_file': image_file_path
+    })
+
+    # 2. Total karts question
+    qa_pairs.append({
+        'question': 'How many karts are there in the scenario?',
+        'answer': str(len(ego_car_name)),
+        'image_file': image_file_path
+    })
+
+    # 3. Track information questions
+    qa_pairs.append({
+        'question': 'What track is this?',
+        'answer': track_name,
+        'image_file': image_file_path
+    })
+
+    # Initialize counters for counting questions
+    karts_left_count = 0
+    karts_right_count = 0
+    karts_front_count = 0
+    karts_behind_count = 0
+
+    # 4. Relative position questions for each kart
+    for kart in kart_objects:
+        if kart['is_ego_car']:
+            continue
+
+        kart_name = kart['kart_name']
+        kart_center_x, kart_center_y = kart['center']
+
+        # Left or right
+        if kart_center_x < ego_car_center_x:
+            left_right = 'left'
+            karts_left_count += 1
+        else:
+            left_right = 'right'
+            karts_right_count += 1
+
+        qa_pairs.append({
+            'question': f'Is {kart_name} to the left or right of the ego car?',
+            'answer': left_right,
+            'image_file': image_file_path
+        })
+
+        # Front or behind
+        # In this dataset, a smaller Y coordinate means the object is further away (in front)
+        if kart_center_y < ego_car_center_y:
+            front_behind = 'front'
+            karts_front_count += 1
+        else:
+            front_behind = 'behind'
+            karts_behind_count += 1
+
+        qa_pairs.append({
+            'question': f'Is {kart_name} in front of or behind the ego car?',
+            'answer': front_behind,
+            'image_file': image_file_path
+        })
+
+        # Combined relative position
+        qa_pairs.append({
+            'question': f'Where is {kart_name} relative to the ego car?',
+            'answer': f'The {kart_name} kart is to the {left_right} and {front_behind} of the ego car.',
+            'image_file': image_file_path
+        })
 
 
-def check_qa_pairs(info_file: str, view_index: int):
+    # 5. Counting questions
+    qa_pairs.append({
+        'question': 'How many karts are to the left of the ego car?',
+        'answer': str(karts_left_count),
+        'image_file': image_file_path
+    })
+
+    qa_pairs.append({
+        'question': 'How many karts are to the right of the ego car?',
+        'answer': str(karts_right_count),
+        'image_file': image_file_path
+    })
+
+    qa_pairs.append({
+        'question': 'How many karts are in front of the ego car?',
+        'answer': str(karts_front_count),
+        'image_file': image_file_path
+    })
+
+    qa_pairs.append({
+        'question': 'How many karts are behind the ego car?',
+        'answer': str(karts_behind_count),
+        'image_file': image_file_path
+    })
+
+    return qa_pairs
+
+
+
+def check_qa_pairs(info_path: str, view_index: int):
     """
     Check QA pairs for a specific info file and view index.
 
@@ -214,12 +398,13 @@ def check_qa_pairs(info_file: str, view_index: int):
         view_index: Index of the view to analyze
     """
     # Find corresponding image file
-    info_path = Path(info_file)
+    info_path = Path(info_path)
     base_name = info_path.stem.replace("_info", "")
     image_file = list(info_path.parent.glob(f"{base_name}_{view_index:02d}_im.jpg"))[0]
+    print(" image_file ", image_file)
 
     # Visualize detections
-    annotated_image = draw_detections(str(image_file), info_file)
+    annotated_image = draw_detections(str(image_file), info_path)
 
     # Display the image
     plt.figure(figsize=(12, 8))
@@ -229,7 +414,7 @@ def check_qa_pairs(info_file: str, view_index: int):
     plt.show()
 
     # Generate QA pairs
-    qa_pairs = generate_qa_pairs(info_file, view_index)
+    qa_pairs = generate_qa_pairs(info_path, view_index)
 
     # Print QA pairs
     print("\nQuestion-Answer Pairs:")
@@ -246,10 +431,71 @@ Usage Example: Visualize QA pairs for a specific file and view:
 
 You probably need to add additional commands to Fire below.
 """
+def generate_dataset_file(info_path: str):
+    """
+    Generate question-answer pairs and write them to a JSON file.
+
+    Args:
+        info_file: Path to the info.json file.
+        view_index: Index of the view to analyze.
+        output_file: Path to the output JSON file.
+    """
+    # qa_pairs = generate_qa_pairs(info_path, view_index)
+    #
+    # with open(output_file, 'w') as f:
+    #     json.dump(qa_pairs, f, indent=2)
+    #
+    # print(f"Successfully generated {len(qa_pairs)} QA pairs and saved to {output_file}")
+
+
+    """
+    Generate question-answer pairs for all info files in a given folder.
+
+    Args:
+        data_folder: Path to the folder containing info.json files.
+    """
+    folder_path = Path(info_path)
+    info_files = list(folder_path.glob("*_info.json"))
+
+    if not info_files:
+        print(f"No info.json files found in '{info_path}'.")
+        return
+
+    for info_file in info_files:
+        print(f"Processing {info_file}...")
+        try:
+            with open(info_file, 'r') as f:
+                info_data = json.load(f)
+
+            output_file_name = f"{info_file.stem.replace('_info', '')}_qa_pairs.json"
+            output_path = folder_path /"test"/ output_file_name
+
+            # The 'detections' array is a list of detections for each view.
+            # We need to loop through each view to generate QA pairs.
+            all_qa_pairs = []
+            for view_index in range(len(info_data["detections"])):
+                qa_pairs_for_view = generate_qa_pairs(str(info_file), view_index)
+                all_qa_pairs.extend(qa_pairs_for_view)
+
+            with open(output_path, 'w') as f:
+                json.dump(all_qa_pairs, f, indent=2)
+
+            print(f"Successfully generated {len(all_qa_pairs)} QA pairs and saved to {output_path}")
+
+        except Exception as e:
+            print(f"Error processing {info_file}: {e}")
+
+"""
+Usage Example: Visualize QA pairs for a specific file and view:
+   python generate_qa.py check --info_file ../data/valid/00000_info.json --view_index 0
+
+Usage Example: Generate a JSON dataset file for a folder:
+   python generate_qa.py generate_dataset_file --data_folder ../data/train
+"""
 
 
 def main():
-    fire.Fire({"check": check_qa_pairs})
+    fire.Fire({"check": check_qa_pairs,"generate": generate_qa_pairs, "generate_dataset":generate_dataset_file})
 
 
 if __name__ == "__main__":
