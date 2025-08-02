@@ -263,21 +263,21 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
         ego_car_name = all_kart_names[0] if len(all_kart_names) > 0 else "an unknown kart"
         qa_pairs.append({
             'question': 'What kart is the ego car?',
-            'answer': f'The ego car is {ego_car_name}.',
+            'answer': ego_car_name,
             'image_file': image_file_path
         })
 
         # 2. Total karts question
         qa_pairs.append({
             'question': 'How many karts are there in the scenario?',
-            'answer': f'There are {len(all_kart_names)} karts in total.',
+            'answer': len(all_kart_names),
             'image_file': image_file_path
         })
 
         # 3. Track information question
         qa_pairs.append({
             'question': 'What track is this?',
-            'answer': f'This is the {track_name} track.',
+            'answer': track_name,
             'image_file': image_file_path
         })
 
