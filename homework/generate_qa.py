@@ -309,11 +309,11 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
             'image_file': image_file_path
         })
 
-        qa_pairs.append({
-            'question': 'How many karts are there in the scenario?',
-            'answer': str(len(all_kart_names)),
-            'image_file': image_file_path
-        })
+        # qa_pairs.append({
+        #     'question': 'How many karts are there in the scenario?',
+        #     'answer': str(len(all_kart_names)),
+        #     'image_file': image_file_path
+        # })
 
         qa_pairs.append({
             'question': 'What track is this?',
@@ -364,30 +364,30 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
                 'answer': f'{left_right} and {front_behind}',
                 'image_file': image_file_path
             })
-
-        qa_pairs.append({
-            'question': 'How many karts are to the left of the center kart?',
-            'answer': str(karts_left_count),
-            'image_file': image_file_path
-        })
-
-        qa_pairs.append({
-            'question': 'How many karts are to the right of the center kart?',
-            'answer': str(karts_right_count),
-            'image_file': image_file_path
-        })
-
-        qa_pairs.append({
-            'question': 'How many karts are in front of the center kart?',
-            'answer': str(karts_front_count),
-            'image_file': image_file_path
-        })
-
-        qa_pairs.append({
-            'question': 'How many karts are behind the center kart?',
-            'answer': str(karts_behind_count),
-            'image_file': image_file_path
-        })
+        if ( karts_left_count > 0):
+            qa_pairs.append({
+                'question': 'How many karts are to the left of the center kart?',
+                'answer': str(karts_left_count),
+                'image_file': image_file_path
+            })
+        if (karts_right_count > 0):
+            qa_pairs.append({
+                'question': 'How many karts are to the right of the center kart?',
+                'answer': str(karts_right_count),
+                'image_file': image_file_path
+            })
+        if(karts_front_count > 0):
+            qa_pairs.append({
+                'question': 'How many karts are in front of the center kart?',
+                'answer': str(karts_front_count),
+                'image_file': image_file_path
+            })
+        if(karts_behind_count > 0):
+            qa_pairs.append({
+                'question': 'How many karts are behind the center kart?',
+                'answer': str(karts_behind_count),
+                'image_file': image_file_path
+            })
 
         return qa_pairs
 
