@@ -473,7 +473,7 @@ def generate_dataset_file(info_path: str):
                 info_data = json.load(f)
 
             output_file_name = f"{info_file.stem.replace('_info', '')}_qa_pairs.json"
-            output_path = folder_path /"test"/ output_file_name
+            output_path = folder_path/output_file_name
 
             # The 'detections' array is a list of detections for each view.
             # We need to loop through each view to generate QA pairs.
