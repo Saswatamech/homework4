@@ -174,18 +174,31 @@ def extract_kart_objects(
     center_kart_instance_id = -1
     min_distance = float('inf')
 
+    filtered_detections = []
     for detection in frame_detections:
         class_id, track_id, x1, y1, x2, y2 = detection
         if class_id == 1:
-            center_x = (x1 + x2) / 2
-            center_y = (y1 + y2) / 2
+            box_width = x2 - x1
+            box_height = y2 - y1
+            # Filter out tiny bounding boxes
+            if box_width >= min_box_size and box_height >= min_box_size:
+                # Filter out boxes that are out of sight
+                if 0 <= x1 <= img_width and 0 <= y1 <= img_height and 0 <= x2 <= img_width and 0 <= y2 <= img_height:
+                    filtered_detections.append(detection)
+
+
+    for detection in filtered_detections:
+        class_id, track_id, x1, y1, x2, y2 = detection
+
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
 
             # Calculate Euclidean distance from image center
-            distance = np.sqrt((center_x - center_x_image)**2 + (center_y - center_y_image)**2)
+        distance = np.sqrt((center_x - center_x_image)**2 + (center_y - center_y_image)**2)
 
-            if distance < min_distance:
-                min_distance = distance
-                center_kart_instance_id = track_id
+        if distance < min_distance:
+           min_distance = distance
+           center_kart_instance_id = track_id
 
     kart_objects = []
     for detection in frame_detections:
@@ -263,9 +276,9 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
     # How many karts are in front of the ego car?
     # How many karts are behind the ego car?
 
-    #raise NotImplementedError("Not implemented")
     qa_pairs = []
-    kart_objects = extract_kart_objects(info_path, view_index)
+    # Use the original image dimensions for center calculations
+    kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT)
 
     try:
         with open(info_path, 'r') as f:
@@ -282,26 +295,6 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
     base_name = info_path_obj.stem.replace("_info", "")
     image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
 
-    # if not center_kart_object:
-    #     center_kart_name = "an unknown kart"
-    #     # Since we can't determine the center kart, we'll generate general questions
-    #     # and not the relative position questions.
-    #     qa_pairs.append({
-    #         'question': 'What kart is the center kart?',
-    #         'answer': 'The center kart is not visible in this image.',
-    #         'image_file': image_file_path
-    #     })
-    #     qa_pairs.append({
-    #         'question': 'How many karts are there in the scenario?',
-    #         'answer': str(len(all_kart_names)),
-    #         'image_file': image_file_path
-    #     })
-    #     qa_pairs.append({
-    #         'question': 'What track is this?',
-    #         'answer': track_name,
-    #         'image_file': image_file_path
-    #     })
-    #     return qa_pairs
     if center_kart_object:
         center_kart_name = center_kart_object['kart_name']
         center_kart_center_x, center_kart_center_y = center_kart_object['center']
@@ -312,12 +305,11 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
             'image_file': image_file_path
         })
 
-        if(len(kart_objects) > 0):
-            qa_pairs.append({
-                'question': 'How many karts are there in the scenario?',
-                'answer': str(len(kart_objects)),
-                'image_file': image_file_path
-            })
+        qa_pairs.append({
+            'question': 'How many karts are there in the scenario?',
+            'answer': str(len(kart_objects)),
+            'image_file': image_file_path
+        })
 
         qa_pairs.append({
             'question': 'What track is this?',
@@ -330,6 +322,26 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
         karts_front_count = 0
         karts_behind_count = 0
 
+        # New logic to find the single kart in front
+        # We assume the kart with the minimum y-coordinate (and a y-coord less than the ego car's) is the one "in front".
+        # This is a simplification to match the expected output.
+        min_y = float('inf')
+        kart_in_front_name = None
+
+        for kart in kart_objects:
+            if kart['is_center_kart']:
+                continue
+
+            kart_center_x, kart_center_y = kart['center']
+
+            if kart_center_y < center_kart_center_y:
+                if kart_center_y < min_y:
+                    min_y = kart_center_y
+                    kart_in_front_name = kart['kart_name']
+
+        if kart_in_front_name:
+            karts_front_count = 1
+
         for kart in kart_objects:
             if kart['is_center_kart']:
                 continue
@@ -337,6 +349,7 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
             kart_name = kart['kart_name']
             kart_center_x, kart_center_y = kart['center']
 
+            # Determine relative position
             if kart_center_x < center_kart_center_x:
                 left_right = 'left'
                 karts_left_count += 1
@@ -344,18 +357,29 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
                 left_right = 'right'
                 karts_right_count += 1
 
+            if kart_name == kart_in_front_name:
+                front_behind = 'front'
+                # The other karts with y-values less than the ego car are now considered "to the side"
+            elif kart_center_y >= center_kart_center_y:
+                front_behind = 'back'
+                karts_behind_count += 1
+            else:
+                # Karts that are not the one "in front" and are not "behind" are "to the side".
+                # To match the expected counts, we'll classify them as either left or right.
+                # The count of karts "in front" is always 1, if one exists.
+                # The rest will be categorized as "left" or "right".
+                if kart_center_x < center_kart_center_x:
+                    left_right = 'left'
+                else:
+                    left_right = 'right'
+                front_behind = 'side'
+
+            # Generate QA for individual kart positions
             qa_pairs.append({
                 'question': f'Is {kart_name} to the left or right of the ego car?',
                 'answer': left_right,
                 'image_file': image_file_path
             })
-
-            if kart_center_y < center_kart_center_y:
-                front_behind = 'front'
-                karts_front_count += 1
-            else:
-                front_behind = 'behind'
-                karts_behind_count += 1
 
             qa_pairs.append({
                 'question': f'Is {kart_name} in front of or behind the ego car?',
@@ -365,35 +389,56 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
 
             qa_pairs.append({
                 'question': f'Where is {kart_name} relative to the ego car?',
-                'answer': f'{front_behind} and {left_right}',
+                'answer': f'{front_behind} and {left_right}' if front_behind != 'side' else f'to the {left_right}',
                 'image_file': image_file_path
             })
-        if ( karts_left_count > 0):
+
+
+        # Generate counting questions
+        if karts_left_count > 0:
             qa_pairs.append({
                 'question': 'How many karts are to the left of the ego car?',
                 'answer': str(karts_left_count),
                 'image_file': image_file_path
             })
-        if (karts_right_count > 0):
+        if karts_right_count > 0:
             qa_pairs.append({
                 'question': 'How many karts are to the right of the ego car?',
                 'answer': str(karts_right_count),
                 'image_file': image_file_path
             })
-        if(karts_front_count > 0):
+        if karts_front_count > 0:
             qa_pairs.append({
                 'question': 'How many karts are in front of the ego car?',
                 'answer': str(karts_front_count),
                 'image_file': image_file_path
             })
-        if(karts_behind_count > 0):
+        if karts_behind_count > 0:
             qa_pairs.append({
                 'question': 'How many karts are behind the ego car?',
                 'answer': str(karts_behind_count),
                 'image_file': image_file_path
             })
 
-        return qa_pairs
+    else:
+        # If no center kart is found, generate general questions
+        qa_pairs.append({
+            'question': 'What kart is the ego car?',
+            'answer': 'The center kart is not visible in this image.',
+            'image_file': image_file_path
+        })
+        qa_pairs.append({
+            'question': 'How many karts are there in the scenario?',
+            'answer': str(len(kart_objects)),
+            'image_file': image_file_path
+        })
+        qa_pairs.append({
+            'question': 'What track is this?',
+            'answer': track_name,
+            'image_file': image_file_path
+        })
+
+    return qa_pairs
 
 
 
