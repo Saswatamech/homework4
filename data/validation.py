@@ -1,0 +1,66 @@
+import json
+import pandas as pd
+from pathlib import Path
+
+def validate_qa_pairs(validation_file, training_dir):
+    """
+    Validates question/answer pairs from training data against a validation set.
+
+    Args:
+        validation_file (str): The path to the validation JSON file.
+        training_dir (str): The directory containing the training JSON files.
+    """
+    try:
+        # Load the validation data
+        with open(validation_file, 'r') as f:
+            validation_data = json.load(f)
+        df_validation = pd.DataFrame(validation_data)
+        df_validation_unique = df_validation.drop(columns=['image_file']).drop_duplicates(subset=['question', 'answer'])
+
+        # Aggregate training data
+        all_training_data = []
+        training_path = Path(training_dir)
+        for file_path in training_path.glob('*_qa_pairs.json'):
+            with open(file_path, 'r') as f:
+                all_training_data.extend(json.load(f))
+
+        if not all_training_data:
+            print("No training files found or files are empty.")
+            return
+
+        df_training = pd.DataFrame(all_training_data)
+        df_training_unique = df_training.drop(columns=['image_file']).drop_duplicates(subset=['question', 'answer'])
+
+        # Find matching pairs
+        df_matches = pd.merge(df_training_unique, df_validation_unique, on=['question', 'answer'], how='inner')
+
+        # Calculate and print accuracy
+        total_training_pairs = len(df_training_unique)
+        matching_pairs = len(df_matches)
+        total_valid_pairs = len(df_validation_unique)
+        print("total records in validation :",total_valid_pairs)
+        print(" matching_pairs :",df_matches)
+
+        if total_training_pairs > 0:
+            accuracy = (matching_pairs / total_valid_pairs) * 100
+            print(f"Total unique training pairs: {total_training_pairs}")
+            print(f"Matching pairs found in validation data: {matching_pairs}")
+            print(f"Accuracy of the training data compared to the validation data: {accuracy:.2f}%")
+        else:
+            print("No unique question/answer pairs found in the training data to validate.")
+
+        if not df_matches.empty:
+            print("\nMatching question/answer pairs:")
+            print(df_matches.head())
+        else:
+            print("\nNo matching question/answer pairs were found.")
+
+    except FileNotFoundError as e:
+        print(f"Error: A file was not found. Please check the paths: {e}")
+    except json.JSONDecodeError:
+        print("Error: Could not decode one of the JSON files. Please check the file format.")
+
+# Example usage (you will need to change the paths)
+# validate_qa_pairs('balanced_qa_pairs.json', '/data/train')
+
+validate_qa_pairs('balanced_qa_pairs.json','valid')

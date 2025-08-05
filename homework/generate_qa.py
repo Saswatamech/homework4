@@ -227,7 +227,7 @@ def extract_track_info(info_path: str) -> str:
     #raise NotImplementedError("Not implemented")
 
 
-def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img_height: int = 100) -> list:
+def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 600, img_height: int = 400) -> list:
     """
     Generate question-answer pairs for a given view.
 
@@ -240,6 +240,9 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
     Returns:
         List of dictionaries, each containing a question and answer
     """
+
+#     ORIGINAL_WIDTH = 600
+# ORIGINAL_HEIGHT = 400
     # 1. Ego car question
     # What kart is the ego car?
 
@@ -309,11 +312,11 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
             'image_file': image_file_path
         })
 
-        # qa_pairs.append({
-        #     'question': 'How many karts are there in the scenario?',
-        #     'answer': str(len(all_kart_names)),
-        #     'image_file': image_file_path
-        # })
+        qa_pairs.append({
+            'question': 'How many karts are there in the scenario?',
+            'answer': str(len(kart_objects)),
+            'image_file': image_file_path
+        })
 
         qa_pairs.append({
             'question': 'What track is this?',
@@ -341,7 +344,7 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
                 karts_right_count += 1
 
             qa_pairs.append({
-                'question': f'Is {kart_name} to the left or right of the center kart?',
+                'question': f'Is {kart_name} to the left or right of the ego car?',
                 'answer': left_right,
                 'image_file': image_file_path
             })
@@ -354,37 +357,37 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
                 karts_behind_count += 1
 
             qa_pairs.append({
-                'question': f'Is {kart_name} in front of or behind the center kart?',
+                'question': f'Is {kart_name} in front of or behind the ego car?',
                 'answer': front_behind,
                 'image_file': image_file_path
             })
 
             qa_pairs.append({
-                'question': f'Where is {kart_name} relative to the center kart?',
-                'answer': f'{left_right} and {front_behind}',
+                'question': f'Where is {kart_name} relative to the ego car?',
+                'answer': f'{front_behind} and {left_right}',
                 'image_file': image_file_path
             })
         if ( karts_left_count > 0):
             qa_pairs.append({
-                'question': 'How many karts are to the left of the center kart?',
+                'question': 'How many karts are to the left of the ego car?',
                 'answer': str(karts_left_count),
                 'image_file': image_file_path
             })
         if (karts_right_count > 0):
             qa_pairs.append({
-                'question': 'How many karts are to the right of the center kart?',
+                'question': 'How many karts are to the right of the ego car?',
                 'answer': str(karts_right_count),
                 'image_file': image_file_path
             })
         if(karts_front_count > 0):
             qa_pairs.append({
-                'question': 'How many karts are in front of the center kart?',
+                'question': 'How many karts are in front of the ego car?',
                 'answer': str(karts_front_count),
                 'image_file': image_file_path
             })
         if(karts_behind_count > 0):
             qa_pairs.append({
-                'question': 'How many karts are behind the center kart?',
+                'question': 'How many karts are behind the ego car?',
                 'answer': str(karts_behind_count),
                 'image_file': image_file_path
             })
