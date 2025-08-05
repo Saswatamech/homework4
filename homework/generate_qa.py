@@ -227,7 +227,7 @@ def extract_track_info(info_path: str) -> str:
     #raise NotImplementedError("Not implemented")
 
 
-def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 600, img_height: int = 400) -> list:
+def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img_height: int = 100) -> list:
     """
     Generate question-answer pairs for a given view.
 
@@ -312,11 +312,12 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 600, img
             'image_file': image_file_path
         })
 
-        qa_pairs.append({
-            'question': 'How many karts are there in the scenario?',
-            'answer': str(len(kart_objects)),
-            'image_file': image_file_path
-        })
+        if(len(kart_objects) > 0):
+            qa_pairs.append({
+                'question': 'How many karts are there in the scenario?',
+                'answer': str(len(kart_objects)),
+                'image_file': image_file_path
+            })
 
         qa_pairs.append({
             'question': 'What track is this?',

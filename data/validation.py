@@ -29,7 +29,7 @@ def validate_qa_pairs(validation_file, training_dir):
             return
 
         df_training = pd.DataFrame(all_training_data)
-        df_training_unique = df_training.drop(columns=['image_file']).drop_duplicates(subset=['question', 'answer'])
+        df_training_unique = df_training.drop_duplicates(subset=['question', 'answer'])
 
         # Find matching pairs
         df_matches = pd.merge(df_training_unique, df_validation_unique, on=['question', 'answer'], how='inner')
@@ -40,9 +40,12 @@ def validate_qa_pairs(validation_file, training_dir):
         total_valid_pairs = len(df_validation_unique)
         print("total records in validation :",total_valid_pairs)
         print(" matching_pairs :",df_matches)
+        print("total training records :",len(df_training))
+        print("total matching records :",len(df_matches))
+        print("total valid records :",len(df_validation))
 
         if total_training_pairs > 0:
-            accuracy = (matching_pairs / total_valid_pairs) * 100
+            accuracy = (len(df_matches) / len(df_validation)) * 100
             print(f"Total unique training pairs: {total_training_pairs}")
             print(f"Matching pairs found in validation data: {matching_pairs}")
             print(f"Accuracy of the training data compared to the validation data: {accuracy:.2f}%")
