@@ -214,9 +214,106 @@ def generate_caption_file(data_folder: str):
         except Exception as e:
             print(f"Error processing {info_file}: {e}")
 
+def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
+    """
+    Helper function to generate a single caption entry (image_file, caption)
+    for a given info file and view index, matching the example_captions.json format.
+    """
+    try:
+        with open(info_path, 'r') as f:
+            info_data = json.load(f)
+    except FileNotFoundError:
+        # Return a placeholder or raise an error as appropriate for a helper
+        return {"image_file": "", "caption": "Error: Info file not found."}
+
+    track_name = info_data.get('track', 'Unknown Track')
+    kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT, min_box_size=10)
+
+    correct_statement = ""
+
+    # Randomly choose which type of caption to generate for this entry
+    caption_type_choices = []
+    if next((k for k in kart_objects if k['is_center_kart']), None):
+        caption_type_choices.append("ego_car")
+    if kart_objects: # Only if there are karts to count
+        caption_type_choices.append("num_karts")
+    caption_type_choices.append("track_name")
+
+    if not caption_type_choices: # Fallback if no specific captions can be generated
+        correct_statement = "A scene from the game."
+    else:
+        chosen_type = random.choice(caption_type_choices)
+
+        if chosen_type == "ego_car":
+            center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
+            if center_kart_object:
+                ego_car_name = center_kart_object['kart_name']
+                correct_statement = f"{ego_car_name} is the ego car."
+        elif chosen_type == "num_karts":
+            correct_statement = f"There are {len(kart_objects)} karts in the scene."
+        elif chosen_type == "track_name":
+            correct_statement = f"The track is {track_name}."
+
+    info_path_obj = Path(info_path)
+    # Extract the base name (e.g., '00000') from '00000_info.json'
+    base_name = info_path_obj.stem.replace("_info", "")
+    # Construct the image file path relative to the data folder (e.g., 'train/00000_00_im.jpg')
+    # The parent.name will give 'train' if info_path is 'data/train/00000_info.json'
+    image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
+
+    return {
+        "image_file": image_file_path,
+        "caption": correct_statement
+    }
+
+def generate_train_caption_data(data_folder: str):
+    """
+    Generates training caption data (image_file, caption) for all info files
+    in a given folder and saves them to a single JSON file,
+    matching the format of example_captions.json.
+
+    Args:
+        data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
+        output_file (str): The name of the output JSON file (e.g., 'generated_train_captions.json').
+    """
+    folder_path = Path(data_folder)
+    info_files = list(folder_path.glob("*_info.json"))
+
+    if not info_files:
+        print(f"No info.json files found in '{data_folder}'.")
+        return
+
+    for info_file in info_files:
+        print(f"Processing {info_file} for training captions...")
+        try:
+            with open(info_file, 'r') as f:
+                info_data = json.load(f)
+
+            # Define the output file name for this specific info_file
+            output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
+            output_path = folder_path / output_file_name
+
+            if "detections" not in info_data:
+                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+                continue
+
+            current_info_train_captions_data = []
+            for view_index in range(len(info_data["detections"])):
+                # Use the helper function for single caption entries (training format)
+                caption_entry = _generate_single_caption_entry(str(info_file), view_index)
+                current_info_train_captions_data.append(caption_entry)
+
+            with open(output_path, 'w') as f:
+                json.dump(current_info_train_captions_data, f, indent=2)
+
+            print(f"Successfully generated {len(current_info_train_captions_data)} training caption entries and saved to {output_path}")
+
+        except Exception as e:
+            print(f"Error processing {info_file}: {e}")
+
 
 def main():
-    fire.Fire({"check": check_caption,"generate_caption":generate_caption_file})
+    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data})
 
 
 if __name__ == "__main__":
