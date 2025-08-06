@@ -253,7 +253,7 @@ class CLIP(nn.Module):
 
             return vision_projection_normalized, text_projection_normalized, logits
 
-    def compute_clip_loss(
+def compute_clip_loss(
         outputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
         labels: torch.Tensor,
         num_items_in_batch: int | None = None,
@@ -301,7 +301,7 @@ class CLIP(nn.Module):
         return loss
 
 
-    def get_target_modules_for_lora(model: nn.Module) -> list[str]:
+def get_target_modules_for_lora(model: nn.Module) -> list[str]:
         target_modules = []
         for name, module in model.named_modules():
             # if isinstance(module, nn.Linear) and ("vision_encoder" in name and "projection" not in name):
@@ -315,7 +315,7 @@ class CLIP(nn.Module):
         return target_modules
 
 
-    def train(
+def train(
         data_dir: Path | None = None,
         output_dir: str = "clip",
         num_train_epochs: float = 1,
@@ -398,7 +398,7 @@ class CLIP(nn.Module):
         return model, processor
 
 
-    def demo_train():
+def demo_train():
         train(
             train_dataset_name="train_demo",
             output_dir="demo_clip",
@@ -410,7 +410,7 @@ class CLIP(nn.Module):
         )
 
 
-    def test(ckpt_path: str, val_dataset: str = "valid_grader"):
+def test(ckpt_path: str, val_dataset: str = "valid_grader"):
         import tqdm
 
         testset = MultiChoiceQADataset(val_dataset)
@@ -454,7 +454,7 @@ class CLIP(nn.Module):
         print(f"Accuracy: {correct_count / total_count}")
 
 
-    def main():
+def main():
         from fire import Fire
 
         Fire({"train": train, "test": test, "demo_train":demo_train})
