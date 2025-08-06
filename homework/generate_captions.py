@@ -1,9 +1,12 @@
+import random
 from pathlib import Path
 
 import fire
+import json
 from matplotlib import pyplot as plt
 
-from .generate_qa import draw_detections, extract_frame_info
+from generate_qa import extract_kart_objects, ORIGINAL_WIDTH, ORIGINAL_HEIGHT, draw_detections, \
+    extract_frame_info
 
 
 def generate_caption(info_path: str, view_index: int, img_width: int = 150, img_height: int = 100) -> list:
@@ -22,7 +25,123 @@ def generate_caption(info_path: str, view_index: int, img_width: int = 150, img_
     # 4. Relative position
     # {kart_name} is {position} of the ego car.
 
-    raise NotImplementedError("Not implemented")
+    #raise NotImplementedError("Not implemented")
+
+    try:
+        with open(info_path, 'r') as f:
+            info_data = json.load(f)
+    except FileNotFoundError:
+        return {
+            "image_file": "",
+            "candidates": ["Error: Info file not found."],
+            "correct_index": 0
+        }
+
+    track_name = info_data.get('track', 'Unknown Track')
+    kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT, min_box_size=10)
+
+    candidates = []
+    correct_statement = ""
+
+    # Prioritize generating a correct statement that matches the expected format
+    # The expected format examples suggest simple statements about ego car, track, or kart count.
+
+    # Candidate 1: Ego car statement
+    center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
+    if center_kart_object:
+        ego_car_name = center_kart_object['kart_name']
+        correct_statement_type = random.choice(["ego_car", "num_karts", "track_name"])
+    else:
+        # If no ego car, we can't make an ego car statement
+        correct_statement_type = random.choice(["num_karts", "track_name"])
+
+    if correct_statement_type == "ego_car" and center_kart_object:
+        correct_statement = f"{ego_car_name} is the ego car."
+    elif correct_statement_type == "num_karts":
+        correct_statement = f"There are {len(kart_objects)} karts in the scene."
+    elif correct_statement_type == "track_name":
+        correct_statement = f"The track is {track_name}."
+
+    candidates.append(correct_statement)
+
+    # Generate incorrect candidates
+    all_kart_names = info_data.get('karts', [])
+    all_tracks = ["abyss", "fortmagma", "black_forest", "cornfield_crossing", "gran_paradiso_island",
+                  "hacienda", "lighthouse", "minigolf", "olivermath", "overworld",
+                  "ravenbridge_mansion", "sandtrack", "scotland", "snowmountain",
+                  "snowtuxpeak", "tutorial", "volcano_island", "xr591", "zengarden"] # Expanded list of tracks
+
+
+    # Add incorrect ego car statements
+    if center_kart_object:
+        incorrect_ego_karts = [k_name for k_name in all_kart_names if k_name != ego_car_name]
+        if incorrect_ego_karts:
+            candidates.append(f"{random.choice(incorrect_ego_karts)} is the ego car.")
+    elif all_kart_names: # If no ego car, still add a random kart name as incorrect
+        candidates.append(f"{random.choice(all_kart_names)} is the ego car.")
+
+
+    # Add incorrect total karts statements
+    incorrect_num_karts_options = [str(n) for n in range(max(0, len(kart_objects) - 2), len(kart_objects) + 3) if n != len(kart_objects)]
+    if incorrect_num_karts_options:
+        candidates.append(f"There are {random.choice(incorrect_num_karts_options)} karts in the scene.")
+
+    # Add incorrect track name statements
+    incorrect_tracks_options = [t for t in all_tracks if t != track_name]
+    if incorrect_tracks_options:
+        candidates.append(f"The track is {random.choice(incorrect_tracks_options)}.")
+
+    # Add incorrect relative position statements (if applicable and a center kart exists)
+    other_karts = [k for k in kart_objects if not k['is_center_kart']]
+    if center_kart_object and other_karts:
+        random_kart_for_incorrect_pos = random.choice(other_karts)
+        kart_name_rp = random_kart_for_incorrect_pos['kart_name']
+
+        # Invert position for incorrect candidate
+        kart_x_rp = random_kart_for_incorrect_pos['center'][0]
+        kart_y_rp = random_kart_for_incorrect_pos['center'][1]
+        ego_car_x_rp = center_kart_object['center'][0]
+        ego_car_y_rp = center_kart_object['center'][1]
+
+        # Invert x_pos
+        inverted_x_pos = 'right of' if kart_x_rp < ego_car_x_rp else 'left of'
+        # Invert y_pos
+        inverted_y_pos = 'behind' if kart_y_rp < ego_car_y_rp else 'in front of'
+
+        candidates.append(f"{kart_name_rp} is {inverted_y_pos} and {inverted_x_pos} the ego car.")
+
+
+    # Ensure we have at least 5 unique candidates, add more generic ones if needed
+    while len(candidates) < 5:
+        generic_incorrect_options = [
+            "This is a night scene.",
+            "The karts are racing on a street.",
+            "There are no karts visible.",
+            "The track is a desert."
+        ]
+        candidates.append(random.choice(generic_incorrect_options))
+        candidates = list(set(candidates)) # Remove duplicates
+
+    # Trim to exactly 5 candidates if more than 5 after adding generic ones
+    if len(candidates) > 5:
+        candidates = random.sample(candidates, 5)
+        # Ensure the correct statement is still in candidates after trimming
+        if correct_statement not in candidates:
+            candidates[random.randint(0, 4)] = correct_statement # Replace a random one with the correct one
+
+    # Shuffle candidates again to randomize correct_index
+    random.shuffle(candidates)
+    correct_index = candidates.index(correct_statement)
+
+    info_path_obj = Path(info_path)
+    base_name = info_path_obj.stem.replace("_info", "")
+    image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
+
+    return {
+        'image_file': image_file_path,
+        'candidates': candidates,
+        'correct_index': correct_index
+    }
 
 
 def check_caption(info_file: str, view_index: int):
@@ -53,10 +172,51 @@ Usage Example: Visualize QA pairs for a specific file and view:
 
 You probably need to add additional commands to Fire below.
 """
+def generate_caption_file(data_folder: str):
+    """
+    Generates (image_file, caption) pairs for all info files in a given folder
+    and saves them to a single JSON file.
+
+    Args:
+        data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
+        output_file (str): The name of the output JSON file (e.g., 'generated_captions.json').
+    """
+    folder_path = Path(data_folder)
+    info_files = list(folder_path.glob("*_info.json"))
+
+    if not info_files:
+        print(f"No info.json files found in '{data_folder}'.")
+        return
+
+    for info_file in info_files:
+        print(f"Processing {info_file}...")
+        try:
+            with open(info_file, 'r') as f:
+                info_data = json.load(f)
+
+            output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
+            output_path = folder_path / output_file_name
+
+            if "detections" not in info_data:
+                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+                continue
+
+            current_info_captions_data = []
+            for view_index in range(len(info_data["detections"])):
+                caption_entry = generate_caption(str(info_file), view_index)
+                current_info_captions_data.append(caption_entry)
+
+            with open(output_path, 'w') as f:
+                json.dump(current_info_captions_data, f, indent=2)
+
+            print(f"Successfully generated {len(current_info_captions_data)} caption entries and saved to {output_path}")
+
+        except Exception as e:
+            print(f"Error processing {info_file}: {e}")
 
 
 def main():
-    fire.Fire({"check": check_caption})
+    fire.Fire({"check": check_caption,"generate_caption":generate_caption_file})
 
 
 if __name__ == "__main__":

@@ -72,14 +72,14 @@ def validate_qa_pairs(validation_file, training_dir):
         print(" mismatched", df_mismatched)
         if not df_mismatched.empty:
             print("Found records with matching image and question but different answers:")
-            for _, row in df_mismatched.iterrows():
-                print("-" * 20)
-                print(f"Image File: {row['image_file']}")
-                print(f"Question: {row['question']}")
-                print(f"Training Answer: {row['answer_training']}")
-                print(f"Validation Answer: {row['answer_validation']}")
-        else:
-            print("No records with mismatched answers were found.")
+           # for _, row in df_mismatched.iterrows():
+                # print("-" * 20)
+                # print(f"Image File: {row['image_file']}")
+                # print(f"Question: {row['question']}")
+                # print(f"Training Answer: {row['answer_training']}")
+                # print(f"Validation Answer: {row['answer_validation']}")
+        #else:
+           # print("No records with mismatched answers were found.")
 
     except FileNotFoundError as e:
         print(f"Error: A file was not found. Please check the paths: {e}")
@@ -90,4 +90,4 @@ def validate_qa_pairs(validation_file, training_dir):
 # Example usage (you will need to change the paths)
 # validate_qa_pairs('balanced_qa_pairs.json', '/data/train')
 
-validate_qa_pairs('balanced_qa_pairs.json','valid')
+validate_qa_pairs('balanced_qa_pairs.json','train')

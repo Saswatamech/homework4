@@ -100,7 +100,15 @@ class CLIP(nn.Module):
         self.vision_encoder = vision_encoder
         self.text_encoder = text_encoder
         # TODO: implement the rest components
-        raise NotImplementedError("Not implemented")
+        #raise NotImplementedError("Not implemented")
+        # Initialize projection layers
+        # The hidden size of the vision encoder's last_hidden_state is typically the embedding dimension
+        # For the text encoder, it's the hidden size of the last_hidden_state
+        self.vision_projection = nn.Linear(vision_encoder.config.hidden_size, proj_dim)
+        self.text_projection = nn.Linear(text_encoder.config.hidden_size, proj_dim)
+
+        # Initialize temperature as a trainable parameter
+        self.temperature = nn.Parameter(torch.tensor(temperature))
 
     def encode_image(self, image: torch.Tensor) -> torch.Tensor:
         return self.vision_encoder(image)
@@ -176,9 +184,36 @@ class CLIP(nn.Module):
             (NOTE: you don't need to use the variable `labels`, this is just for compatibility with the Trainer class)
             (Hint: refer to returned values of the __getitem__ method in the CaptionDatasetForTraining class)
         Returns:
-            TODO: think about the what values should be returned
+             A tuple containing:
+            - vision_projection_normalized: L2-normalized image embeddings (B, proj_dim)
+            - text_projection_normalized: L2-normalized text embeddings (B, proj_dim)
+            - logits: Scaled pairwise cosine similarities (B, B)
         """
-        raise NotImplementedError("Not implemented")
+        #raise NotImplementedError("Not implemented")
+        # Encode image and text
+        # Encode image and text features
+        # vision_features shape: (B, hidden_size_vision)
+        vision_features = self.encode_image(pixel_values)
+        # text_features shape: (B, hidden_size_text)
+        text_features = self.encode_text(input_ids, attention_mask)
+
+        # Project features to a common embedding space
+        # I_e = l2_normalize(np.dot(I_f, W_i), axis=1)
+        # T_e = l2_normalize(np.dot(T_f, W_t), axis=1)
+        vision_projection = self.vision_projection(vision_features)
+        text_projection = self.text_projection(text_features)
+
+        # L2-normalize the projected features
+        vision_projection_normalized = vision_projection / vision_projection.norm(dim=-1, keepdim=True)
+        text_projection_normalized = text_projection / text_projection.norm(dim=-1, keepdim=True)
+
+        # Calculate scaled pairwise cosine similarities (logits)
+        # logits = np.dot(I_e, T_e.T) * np.exp(t)
+        # Clamp temperature to avoid numerical instability
+        temperature = torch.clamp(self.temperature.exp(), max=100) # prevent large values
+        logits = torch.matmul(vision_projection_normalized, text_projection_normalized.T) * temperature
+
+        return vision_projection_normalized, text_projection_normalized, logits
 
 
 def compute_clip_loss(
@@ -197,7 +232,36 @@ def compute_clip_loss(
     Returns:
         The loss for the CLIP model.
     """
-    raise NotImplementedError("Not implemented")
+    #raise NotImplementedError("Not implemented")
+
+ # Unpack outputs
+    _, _, logits = outputs
+
+    # Get batch size (n)
+    n = logits.shape[0]
+
+    # Create labels for cross-entropy loss
+    # labels = np.arange(n)
+    labels = torch.arange(n, device=logits.device)
+
+    # Compute loss_i (image to text loss)
+    # loss_i = cross_entropy_loss(logits, labels, axis=0)
+    # For image to text, we compare each row (image) with all texts.
+    # The correct text for image `i` is at index `i` in the `labels` tensor.
+    loss_i = nn.functional.cross_entropy(logits, labels)
+
+    # Compute loss_t (text to image loss)
+    # loss_t = cross_entropy_loss(logits, labels, axis=1)
+    # For text to image, we compare each column (text) with all images.
+    # We need to transpose the logits matrix to align texts as rows and images as columns.
+    # Then the correct image for text `j` is at index `j` in the `labels` tensor.
+    loss_t = nn.functional.cross_entropy(logits.T, labels)
+
+    # Combine losses
+    # loss = (loss_i + loss_t)/2
+    loss = (loss_i + loss_t) / 2
+
+    return loss
 
 
 def get_target_modules_for_lora(model: nn.Module) -> list[str]:
@@ -218,7 +282,7 @@ def train(
     data_dir: Path | None = None,
     output_dir: str = "clip",
     num_train_epochs: float = 1,
-    per_device_train_batch_size: int = 1024,
+    per_device_train_batch_size: int = 32,
     gradient_accumulation_steps: int = 1,
     learning_rate: float = 5e-4,
     num_workers: int = 16,
