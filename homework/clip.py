@@ -155,7 +155,7 @@ def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> 
         text_features[i] = text_output.last_hidden_state[i, eos_index, :]
     return text_features
 
-    def save_pretrained(self, save_directory: str, **kwargs):
+def save_pretrained(self, save_directory: str, **kwargs):
         """Customize save method, save additional parameters"""
 
         additional_state_dict = {}
@@ -166,7 +166,7 @@ def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> 
 
         torch.save(additional_state_dict, Path(save_directory) / "additional_weights.pt")
 
-    def load_pretrained(self, load_directory: str, **kwargs):
+def load_pretrained(self, load_directory: str, **kwargs):
         """Customize load method, load projection additional parameters"""
 
         additional_weights_path = Path(load_directory) / "additional_weights.pt"
@@ -178,13 +178,13 @@ def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> 
                     continue
                 param.data = additional_state_dict[name]
 
-    def set_trainable_parameters(self):
+def set_trainable_parameters(self):
         for name, param in self.named_parameters():
             if "vision_encoder." in name or "text_encoder." in name:
                 continue
             param.requires_grad = True
 
-    def gradient_checkpointing_enable(self, **kwargs):
+def gradient_checkpointing_enable(self, **kwargs):
         """
         Enable gradient checkpointing for the vision and text backbones.
         (You don't need to touch this method)
@@ -192,7 +192,7 @@ def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> 
         self.vision_encoder.gradient_checkpointing_enable(**kwargs)
         self.text_encoder.gradient_checkpointing_enable(**kwargs)
 
-    def enable_input_require_grads(self):
+def enable_input_require_grads(self):
         """
         Enable input require grads for the vision and text backbones.
         (You don't need to touch this method)
@@ -205,7 +205,7 @@ def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> 
         self.vision_encoder.embeddings.register_forward_hook(make_inputs_require_grads)
         self.text_encoder.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
 
-    def forward(
+def forward(
         self,
         pixel_values: torch.Tensor,
         input_ids: torch.Tensor,
@@ -317,7 +317,6 @@ def get_target_modules_for_lora(model: nn.Module) -> list[str]:
 
 def train(
     data_dir: Path | None = None,
-    train_dataset_name: str = "train",
     output_dir: str = "clip",
     num_train_epochs: float = 1,
     per_device_train_batch_size: int = 1024,
