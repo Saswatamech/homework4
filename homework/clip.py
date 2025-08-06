@@ -110,11 +110,50 @@ class CLIP(nn.Module):
         # Initialize temperature as a trainable parameter
         self.temperature = nn.Parameter(torch.tensor(temperature))
 
-    def encode_image(self, image: torch.Tensor) -> torch.Tensor:
-        return self.vision_encoder(image)
+    # def encode_image(self, image: torch.Tensor) -> torch.Tensor:
+    #     return self.vision_encoder(image)
+    #
+    # def encode_text(self, text: str) -> torch.Tensor:
+    #     return self.text_encoder(text)
+def encode_image(self, image: torch.Tensor) -> torch.Tensor:
+    # Get hidden states from the vision encoder
+    # The output of vision_encoder is a BaseModelOutputWithPoolingAndAttentions
+    # We need the last_hidden_state and then average pool it.
+    # The shape of last_hidden_state is (batch_size, sequence_length, hidden_size)
+    vision_output = self.vision_encoder(image)
+    # Average pooling over the sequence length dimension
+    # The first token is usually the CLS token, which can also be used.
+    # For simplicity, we'll average pool all tokens.
+    # This will result in shape (batch_size, hidden_size)
+    return vision_output.last_hidden_state.mean(dim=1)
 
-    def encode_text(self, text: str) -> torch.Tensor:
-        return self.text_encoder(text)
+
+def encode_text(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    # Get hidden states from the text encoder
+    # The output of text_encoder is a BaseModelOutputWithPoolingAndAttentions
+    # We need the last_hidden_state.
+    # The shape of last_hidden_state is (batch_size, sequence_length, hidden_size)
+    text_output = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+    # As per the hint, average pooling is not ideal for padded text.
+    # Instead, we'll get the hidden state of the first occurrence of the EOS token.
+    # The EOS token is `processor.tokenizer.eos_token_id`.
+    # We need to find the index of the first EOS token for each sequence in the batch.
+    # Since the EOS token is appended at the end of the actual text and then padding follows,
+    # the first EOS token is effectively the last non-padding token.
+    # We can find this by looking at the attention mask: the last '1' in the attention mask
+    # corresponds to the last actual token (which is often the EOS token).
+    batch_size, sequence_length, hidden_size = text_output.last_hidden_state.shape
+    text_features = torch.zeros(batch_size, hidden_size, device=input_ids.device)
+
+    for i in range(batch_size):
+        # Find the index of the last non-padding token (which should be the EOS token)
+        # This is the index of the last '1' in the attention mask for that sequence.
+        # If attention_mask is all 1s (no padding), then it's the last token.
+        # If there's padding, it's the last non-padding token.
+        # We add -1 to get the index for 0-based indexing.
+        eos_index = (attention_mask[i] == 1).nonzero(as_tuple=True)[0].max().item()
+        text_features[i] = text_output.last_hidden_state[i, eos_index, :]
+    return text_features
 
     def save_pretrained(self, save_directory: str, **kwargs):
         """Customize save method, save additional parameters"""
@@ -190,7 +229,6 @@ class CLIP(nn.Module):
             - logits: Scaled pairwise cosine similarities (B, B)
         """
         #raise NotImplementedError("Not implemented")
-        # Encode image and text
         # Encode image and text features
         # vision_features shape: (B, hidden_size_vision)
         vision_features = self.encode_image(pixel_values)
@@ -214,7 +252,6 @@ class CLIP(nn.Module):
         logits = torch.matmul(vision_projection_normalized, text_projection_normalized.T) * temperature
 
         return vision_projection_normalized, text_projection_normalized, logits
-
 
 def compute_clip_loss(
     outputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
@@ -280,6 +317,7 @@ def get_target_modules_for_lora(model: nn.Module) -> list[str]:
 
 def train(
     data_dir: Path | None = None,
+    train_dataset_name: str = "train",
     output_dir: str = "clip",
     num_train_epochs: float = 1,
     per_device_train_batch_size: int = 1024,
@@ -416,7 +454,7 @@ def test(ckpt_path: str, val_dataset: str = "valid_grader"):
 def main():
     from fire import Fire
 
-    Fire({"train": train, "test": test})
+    Fire({"train": train, "test": test, "demo_train":demo_train})
 
 
 if __name__ == "__main__":

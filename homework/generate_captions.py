@@ -172,47 +172,47 @@ Usage Example: Visualize QA pairs for a specific file and view:
 
 You probably need to add additional commands to Fire below.
 """
-def generate_caption_file(data_folder: str):
-    """
-    Generates (image_file, caption) pairs for all info files in a given folder
-    and saves them to a single JSON file.
-
-    Args:
-        data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
-        output_file (str): The name of the output JSON file (e.g., 'generated_captions.json').
-    """
-    folder_path = Path(data_folder)
-    info_files = list(folder_path.glob("*_info.json"))
-
-    if not info_files:
-        print(f"No info.json files found in '{data_folder}'.")
-        return
-
-    for info_file in info_files:
-        print(f"Processing {info_file}...")
-        try:
-            with open(info_file, 'r') as f:
-                info_data = json.load(f)
-
-            output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
-            output_path = folder_path / output_file_name
-
-            if "detections" not in info_data:
-                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
-                continue
-
-            current_info_captions_data = []
-            for view_index in range(len(info_data["detections"])):
-                caption_entry = generate_caption(str(info_file), view_index)
-                current_info_captions_data.append(caption_entry)
-
-            with open(output_path, 'w') as f:
-                json.dump(current_info_captions_data, f, indent=2)
-
-            print(f"Successfully generated {len(current_info_captions_data)} caption entries and saved to {output_path}")
-
-        except Exception as e:
-            print(f"Error processing {info_file}: {e}")
+# def generate_caption_file(data_folder: str):
+#     """
+#     Generates (image_file, caption) pairs for all info files in a given folder
+#     and saves them to a single JSON file.
+#
+#     Args:
+#         data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
+#         output_file (str): The name of the output JSON file (e.g., 'generated_captions.json').
+#     """
+#     folder_path = Path(data_folder)
+#     info_files = list(folder_path.glob("*_info.json"))
+#
+#     if not info_files:
+#         print(f"No info.json files found in '{data_folder}'.")
+#         return
+#
+#     for info_file in info_files:
+#         print(f"Processing {info_file}...")
+#         try:
+#             with open(info_file, 'r') as f:
+#                 info_data = json.load(f)
+#
+#             output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
+#             output_path = folder_path / output_file_name
+#
+#             if "detections" not in info_data:
+#                 print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+#                 continue
+#
+#             current_info_captions_data = []
+#             for view_index in range(len(info_data["detections"])):
+#                 caption_entry = generate_caption(str(info_file), view_index)
+#                 current_info_captions_data.append(caption_entry)
+#
+#             with open(output_path, 'w') as f:
+#                 json.dump(current_info_captions_data, f, indent=2)
+#
+#             print(f"Successfully generated {len(current_info_captions_data)} caption entries and saved to {output_path}")
+#
+#         except Exception as e:
+#             print(f"Error processing {info_file}: {e}")
 
 def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
     """
@@ -311,9 +311,51 @@ def generate_train_caption_data(data_folder: str):
         except Exception as e:
             print(f"Error processing {info_file}: {e}")
 
+def generate_all_mc_qas_file(data_folder: str, output_file: str = "all_mc_qas.json"):
+    """
+    Generates (image_file, candidates, correct_index) pairs for all info files in a given folder
+    and saves them to a single JSON file (e.g., all_mc_qas.json).
+    This function is for generating QA-style data for validation/testing.
+
+    Args:
+        data_folder (str): Path to the folder containing info.json files (e.g., 'data/valid').
+        output_file (str): The name of the output JSON file (e.g., 'all_mc_qas.json').
+    """
+    folder_path = Path(data_folder)
+    info_files = list(folder_path.glob("*_info.json"))
+
+    if not info_files:
+        print(f"No info.json files found in '{data_folder}'.")
+        return
+
+    all_qa_data = []
+    for info_file in info_files:
+        print(f"Processing {info_file} for QA captions...")
+        try:
+            with open(info_file, 'r') as f:
+                info_data = json.load(f)
+
+            if "detections" not in info_data:
+                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+                continue
+
+            for view_index in range(len(info_data["detections"])):
+                # Use the original generate_caption for QA format
+                qa_entry = generate_caption(str(info_file), view_index)
+                all_qa_data.append(qa_entry)
+
+        except Exception as e:
+            print(f"Error processing {info_file}: {e}")
+
+    output_path = folder_path / output_file
+    with open(output_path, 'w') as f:
+        json.dump(all_qa_data, f, indent=2)
+
+    print(f"Successfully generated {len(all_qa_data)} QA entries and saved to {output_path}")
+
 
 def main():
-    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data})
+    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data,"generate_validation":generate_all_mc_qas_file})
 
 
 if __name__ == "__main__":
