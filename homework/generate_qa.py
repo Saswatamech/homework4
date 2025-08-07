@@ -239,6 +239,39 @@ def extract_track_info(info_path: str) -> str:
     return data.get('track', 'Unknown Track')
     #raise NotImplementedError("Not implemented")
 
+def _filter_small_karts_relative_to_ego(kart_objects: list) -> list:
+    """
+    Filters out karts whose bounding box area is too small relative to the ego car.
+
+    Args:
+        kart_objects: A list of all detected kart objects.
+
+    Returns:
+        A new list containing only the ego car and other significant karts.
+    """
+    ego_car = next((k for k in kart_objects if k['is_center_kart']), None)
+    if not ego_car:
+        return kart_objects # No ego car, return all karts
+
+    ego_x1, ego_y1, ego_x2, ego_y2 = ego_car['bbox']
+    ego_area = (ego_x2 - ego_x1) * (ego_y2 - ego_y1)
+
+    if ego_area == 0:
+        return kart_objects
+
+    filtered_karts = [ego_car]
+    for kart in kart_objects:
+        if kart['is_center_kart']:
+            continue
+
+        kart_x1, kart_y1, kart_x2, kart_y2 = kart['bbox']
+        kart_area = (kart_x2 - kart_x1) * (kart_y2 - kart_y1)
+
+        # Keep karts whose area is at least 20% of the ego car's area
+        if kart_area >= ego_area * 0.2:
+            filtered_karts.append(kart)
+
+    return filtered_karts
 
 def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img_height: int = 100) -> list:
     """
@@ -279,6 +312,10 @@ def generate_qa_pairs(info_path: str, view_index: int, img_width: int = 150, img
     qa_pairs = []
     # Use the original image dimensions for center calculations
     kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT)
+
+    # Filter out small karts to align with validation data expectations
+    kart_objects = _filter_small_karts_relative_to_ego(kart_objects)
+
 
     try:
         with open(info_path, 'r') as f:
