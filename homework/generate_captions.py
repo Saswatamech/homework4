@@ -353,9 +353,42 @@ def generate_all_mc_qas_file(data_folder: str, output_file: str = "all_mc_qas.js
 
     print(f"Successfully generated {len(all_qa_data)} QA entries and saved to {output_path}")
 
+def count_training_captions(data_folder: str) -> int:
+    """
+    Counts the total number of caption pairs across all *_captions.json files
+    in a given training data folder.
+
+    Args:
+        data_folder (str): The path to the training data folder (e.g., 'data/train').
+
+    Returns:
+        The total number of caption pairs, or 0 if no files are found or an error occurs.
+    """
+    folder_path = Path(data_folder)
+    caption_files = list(folder_path.glob("*_captions.json"))
+
+    if not caption_files:
+        print(f"No caption files found in '{data_folder}'.")
+        return 0
+
+    total_count = 0
+    for file_path in caption_files:
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    total_count += len(data)
+                else:
+                    print(f"Warning: The file '{file_path}' does not contain a list. Skipping.")
+        except json.JSONDecodeError:
+            print(f"Error: Failed to decode JSON from '{file_path}'. Skipping.")
+        except Exception as e:
+            print(f"An unexpected error occurred while processing '{file_path}': {e}")
+
+    return total_count
 
 def main():
-    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data,"generate_validation":generate_all_mc_qas_file})
+    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data,"generate_validation":generate_all_mc_qas_file,"count_training_captions":count_training_captions})
 
 
 if __name__ == "__main__":
