@@ -90,4 +90,4 @@ def validate_qa_pairs(validation_file, training_dir):
 # Example usage (you will need to change the paths)
 # validate_qa_pairs('balanced_qa_pairs.json', '/data/train')
 
-validate_qa_pairs('balanced_qa_pairs.json','train')
+validate_qa_pairs('balanced_qa_pairs.json','valid')
