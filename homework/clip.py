@@ -248,7 +248,7 @@ class CLIP(nn.Module):
             # So we can just use the scaled dot product.
             scaled_logits = torch.matmul(image_embeddings, text_embeddings.T) * torch.exp(self.temperature)
 
-            return scaled_logits, image_embeddings, text_embeddings
+            return image_embeddings, text_embeddings, scaled_logits
 
 def compute_clip_loss(
         outputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
