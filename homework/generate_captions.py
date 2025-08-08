@@ -223,53 +223,43 @@ def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
         with open(info_path, 'r') as f:
             info_data = json.load(f)
     except FileNotFoundError:
-        # Return a placeholder or raise an error as appropriate for a helper
         return {"image_file": "", "caption": "Error: Info file not found."}
 
     track_name = info_data.get('track', 'Unknown Track')
     kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT, min_box_size=10)
 
     correct_statement = ""
+    # Ensure a caption is always generated
+    while correct_statement == "":
+        caption_type_choices = []
+        center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
+        other_karts = [k for k in kart_objects if not k['is_center_kart']]
 
-    # Randomly choose which type of caption to generate for this entry
-    caption_type_choices = []
-    if next((k for k in kart_objects if k['is_center_kart']), None):
-        caption_type_choices.append("ego_car")
-    if kart_objects: # Only if there are karts to count
-        caption_type_choices.append("num_karts")
-    caption_type_choices.append("track_name")
+        if center_kart_object:
+            caption_type_choices.append("ego_car")
+        if kart_objects:
+            caption_type_choices.append("num_karts")
+        caption_type_choices.append("track_name")
+        if center_kart_object and other_karts:
+            caption_type_choices.extend(["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"])
 
-    # Add new captions for relative positions
-    center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
-    other_karts = [k for k in kart_objects if not k['is_center_kart']]
-    if center_kart_object and other_karts:
-        caption_type_choices.extend(["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"])
+        if not caption_type_choices:
+            correct_statement = "A scene from the game."
+        else:
+            chosen_type = random.choice(caption_type_choices)
 
-
-    if not caption_type_choices: # Fallback if no specific captions can be generated
-        correct_statement = "A scene from the game."
-    else:
-        chosen_type = random.choice(caption_type_choices)
-
-        if chosen_type == "ego_car":
-            center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
-            if center_kart_object:
-                ego_car_name = center_kart_object['kart_name']
-                correct_statement = f"{ego_car_name} is the ego car."
-        elif chosen_type == "num_karts":
-            correct_statement = f"There are {len(kart_objects)} karts in the scene."
-        elif chosen_type == "track_name":
-            correct_statement = f"The track is {track_name}."
-        elif chosen_type in ["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"]:
-            # Filter for karts that satisfy the chosen relative position
-            valid_karts = []
-            if center_kart_object and other_karts:
+            if chosen_type == "ego_car":
+                if center_kart_object:
+                    correct_statement = f"{center_kart_object['kart_name']} is the ego car."
+            elif chosen_type == "num_karts":
+                correct_statement = f"There are {len(kart_objects)} karts in the scene."
+            elif chosen_type == "track_name":
+                correct_statement = f"The track is {track_name}."
+            elif chosen_type in ["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"]:
+                valid_karts = []
                 for kart in other_karts:
-                    kart_x = kart['center'][0]
-                    kart_y = kart['center'][1]
-                    ego_x = center_kart_object['center'][0]
-                    ego_y = center_kart_object['center'][1]
-
+                    kart_x, kart_y = kart['center']
+                    ego_x, ego_y = center_kart_object['center']
                     if chosen_type == "front_of_ego" and kart_y < ego_y:
                         valid_karts.append(kart)
                     elif chosen_type == "behind_ego" and kart_y > ego_y:
@@ -288,29 +278,9 @@ def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
                         "left_of_ego": "left of"
                     }
                     correct_statement = f"{target_kart['kart_name']} is {relative_pos_map[chosen_type]} the ego car."
-                else:
-                    # If no valid kart found for the chosen type, generate a different caption
-                    # to prevent an empty caption
-                    other_choices = [c for c in caption_type_choices if c != chosen_type]
-                    if other_choices:
-                        chosen_type = random.choice(other_choices)
-                        # Re-run logic for the new chosen type (recursive call to keep it clean)
-                        if chosen_type == "ego_car":
-                            ego_car_name = center_kart_object['kart_name']
-                            correct_statement = f"{ego_car_name} is the ego car."
-                        elif chosen_type == "num_karts":
-                            correct_statement = f"There are {len(kart_objects)} karts in the scene."
-                        elif chosen_type == "track_name":
-                            correct_statement = f"The track is {track_name}."
-                    else:
-                        correct_statement = "A scene from the game."
-
 
     info_path_obj = Path(info_path)
-    # Extract the base name (e.g., '00000') from '00000_info.json'
     base_name = info_path_obj.stem.replace("_info", "")
-    # Construct the image file path relative to the data folder (e.g., 'train/00000_00_im.jpg')
-    # The parent.name will give 'train' if info_path is 'data/train/00000_info.json'
     image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
 
     return {
@@ -362,7 +332,7 @@ def generate_train_caption_data(data_folder: str):
             current_info_train_captions_data = []
             for view_index in range(len(info_data["detections"])):
                 # Use the helper function for single caption entries (training format)
-                for _ in range(3):  # Generate 2 captions for each view_index
+                for _ in range(3):  # Generate 3 captions for each view_index
                     caption_entry = _generate_single_caption_entry(str(info_file), view_index)
                     current_info_train_captions_data.append(caption_entry)
 

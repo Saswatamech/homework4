@@ -3,6 +3,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision as tv
 from peft import LoraConfig, TaskType, get_peft_model
 from PIL import Image
@@ -228,30 +229,26 @@ class CLIP(nn.Module):
                 - text_projection_normalized: L2-normalized text embeddings (B, proj_dim)
                 - logits: Scaled pairwise cosine similarities (B, B)
             """
-            #raise NotImplementedError("Not implemented")
-            # Encode image and text features
-            # vision_features shape: (B, hidden_size_vision)
-            vision_features = self.encode_image(pixel_values)
-            # text_features shape: (B, hidden_size_text)
+            # 1. Get raw features from encoders
+            image_features = self.encode_image(pixel_values)
             text_features = self.encode_text(input_ids, attention_mask)
 
-            # Project features to a common embedding space
-            # I_e = l2_normalize(np.dot(I_f, W_i), axis=1)
-            # T_e = l2_normalize(np.dot(T_f, W_t), axis=1)
-            vision_projection = self.vision_projection(vision_features)
-            text_projection = self.text_projection(text_features)
+            # 2. Project features to a joint embedding space
+            image_projections = self.vision_projection(image_features)
+            text_projections = self.text_projection(text_features)
 
-            # L2-normalize the projected features
-            vision_projection_normalized = vision_projection / vision_projection.norm(dim=-1, keepdim=True)
-            text_projection_normalized = text_projection / text_projection.norm(dim=-1, keepdim=True)
+            # 3. L2-normalize the projections
+            image_embeddings = F.normalize(image_projections, p=2, dim=-1)
+            text_embeddings = F.normalize(text_projections, p=2, dim=-1)
 
-            # Calculate scaled pairwise cosine similarities (logits)
-            # logits = np.dot(I_e, T_e.T) * np.exp(t)
-            # Clamp temperature to avoid numerical instability
-            temperature = torch.clamp(self.temperature.exp(), max=100) # prevent large values
-            logits = torch.matmul(vision_projection_normalized, text_projection_normalized.T) * temperature
+            # 4. Compute scaled pairwise cosine similarities (logits)
+            # The pseudo code uses np.exp(t)
+            # In PyTorch, we can directly use self.temperature
+            # The pseudo code also has axis=1/0, but F.cross_entropy does that automatically
+            # So we can just use the scaled dot product.
+            scaled_logits = torch.matmul(image_embeddings, text_embeddings.T) * torch.exp(self.temperature)
 
-            return vision_projection_normalized, text_projection_normalized, logits
+            return scaled_logits, image_embeddings, text_embeddings
 
 def compute_clip_loss(
         outputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
