@@ -442,21 +442,24 @@ def generate_all_possible_correct_captions(info_path: str, view_index: int) -> l
         correct_statements.append(f"The track is {track_name}.")
 
     # 4. Relative position
+    # The fix is here: only generate relative position captions if there are other karts.
     if center_kart_object and 'center' in center_kart_object:
-        ego_x, ego_y = center_kart_object['center']
         other_karts = [k for k in kart_objects if not k.get('is_center_kart')]
 
-        for other_kart in other_karts:
-            if 'center' in other_kart and 'kart_name' in other_kart:
-                kart_x, kart_y = other_kart['center']
-                kart_name = other_kart['kart_name']
+        if other_karts:  # Add this check
+            ego_x, ego_y = center_kart_object['center']
 
-                # Determine relative position
-                x_pos = "left of" if kart_x < ego_x else "right of"
-                y_pos = "in front of" if kart_y < ego_y else "behind"
+            for other_kart in other_karts:
+                if 'center' in other_kart and 'kart_name' in other_kart:
+                    kart_x, kart_y = other_kart['center']
+                    kart_name = other_kart['kart_name']
 
-                # Append the correct relative position statement
-                correct_statements.append(f"{kart_name} is {y_pos} and {x_pos} the ego car.")
+                    # Determine relative position
+                    x_pos = "left of" if kart_x < ego_x else "right of"
+                    y_pos = "in front of" if kart_y < ego_y else "behind"
+
+                    # Append the correct relative position statement
+                    correct_statements.append(f"{kart_name} is {y_pos} and {x_pos} the ego car.")
 
     return correct_statements
 
