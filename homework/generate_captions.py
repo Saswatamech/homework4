@@ -424,8 +424,8 @@ def generate_all_possible_correct_captions(info_path: str, view_index: int) -> l
     except FileNotFoundError:
         return ["Error: Info file not found."]
 
-    track_name = info_data.get('track', 'Unknown Track')
     kart_objects = extract_kart_objects(info_path, view_index, img_width=1280, img_height=720, min_box_size=10)
+    track_name = info_data.get('track', 'unknown')
 
     correct_statements = []
 
@@ -438,25 +438,27 @@ def generate_all_possible_correct_captions(info_path: str, view_index: int) -> l
     correct_statements.append(f"There are {len(kart_objects)} karts in the scenario.")
 
     # 3. Track name statement
-    if track_name and track_name != 'Unknown Track':
+    if track_name and track_name != 'unknown' and isinstance(track_name, str):
         correct_statements.append(f"The track is {track_name}.")
 
-    # 4. Relative position
+    # 4. Relative position statement - THIS IS THE FIXED PART
     if center_kart_object and 'center' in center_kart_object:
-        ego_x, ego_y = center_kart_object['center']
         other_karts = [k for k in kart_objects if not k.get('is_center_kart')]
 
-        for other_kart in other_karts:
-            if 'center' in other_kart and 'kart_name' in other_kart:
-                kart_x, kart_y = other_kart['center']
-                kart_name = other_kart['kart_name']
+        # The fix: only generate relative position captions if there are other karts.
+        if other_karts:
+            ego_x, ego_y = center_kart_object['center']
 
-                # Determine relative position
-                x_pos = "left of" if kart_x < ego_x else "right of"
-                y_pos = "in front of" if kart_y < ego_y else "behind"
+            for other_kart in other_karts:
+                if 'center' in other_kart and 'kart_name' in other_kart:
+                    kart_x, kart_y = other_kart['center']
+                    kart_name = other_kart['kart_name']
 
-                # Append the correct relative position statement
-                correct_statements.append(f"{kart_name} is {y_pos} and {x_pos} the ego car.")
+                    x_pos = "left of" if kart_x < ego_x else "right of"
+                    y_pos = "in front of" if kart_y < ego_y else "behind"
+
+                    # Ensure the caption is specific and names the karts
+                    correct_statements.append(f"{kart_name} is {y_pos} and {x_pos} the ego car.")
 
     return correct_statements
 
