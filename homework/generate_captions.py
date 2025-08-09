@@ -589,7 +589,7 @@ def generate_all_data(data_folder: str = "data/train"):
                     captions_to_add = random.sample(all_correct_captions, k=min(3, len(all_correct_captions)))
 
                     # If there are less than 3 unique captions, repeat to fill the list
-                    while len(captions_to_add) < 3:
+                    while len(captions_to_add) < 5:
                         captions_to_add.append(random.choice(all_correct_captions))
 
                     for caption in captions_to_add:
