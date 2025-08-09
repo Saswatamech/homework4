@@ -156,12 +156,6 @@ class CLIP(nn.Module):
             text_features[i] = text_output.last_hidden_state[i, eos_index, :]
         return text_features
 
-    # def encode_image(self, image: torch.Tensor) -> torch.Tensor:
-    #     return self.vision_encoder(image)
-
-    # def encode_text(self, text: str) -> torch.Tensor:
-    #     return self.text_encoder(text)
-
     def save_pretrained(self, save_directory: str, **kwargs):
         """Customize save method, save additional parameters"""
 
@@ -321,7 +315,7 @@ def get_target_modules_for_lora(model: nn.Module) -> list[str]:
 def train(
         data_dir: Path | None = None,
         output_dir: str = "clip",
-        num_train_epochs: float = 0.05,
+        num_train_epochs: float = 1,
         per_device_train_batch_size: int = 1024,
         gradient_accumulation_steps: int = 1,
         learning_rate: float = 5e-4,
@@ -346,8 +340,8 @@ def train(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        r=16,
-        lora_alpha=64,
+        r=8,
+        lora_alpha=32,
         lora_dropout=0.0,
         # target_modules="all-linear",
         target_modules=get_target_modules_for_lora(model),
