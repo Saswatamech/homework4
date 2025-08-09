@@ -172,246 +172,246 @@ Usage Example: Visualize QA pairs for a specific file and view:
 
 You probably need to add additional commands to Fire below.
 """
-def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
-    """
-    Helper function to generate a single caption entry (image_file, caption)
-    for a given info file and view index, matching the example_captions.json format.
-    """
-    try:
-        with open(info_path, 'r') as f:
-            info_data = json.load(f)
-    except FileNotFoundError:
-        return {"image_file": "", "caption": "Error: Info file not found."}
-
-    track_name = info_data.get('track', 'Unknown Track')
-    kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT, min_box_size=10)
-
-    correct_statement = ""
-    # Ensure a caption is always generated
-    while correct_statement == "":
-        caption_type_choices = []
-        center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
-        other_karts = [k for k in kart_objects if not k['is_center_kart']]
-
-        if center_kart_object:
-            caption_type_choices.append("ego_car")
-        if kart_objects:
-            caption_type_choices.append("num_karts")
-        caption_type_choices.append("track_name")
-        if center_kart_object and other_karts:
-            caption_type_choices.extend(["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"])
-
-        if not caption_type_choices:
-            correct_statement = "A scene from the game."
-        else:
-            chosen_type = random.choice(caption_type_choices)
-
-            if chosen_type == "ego_car":
-                if center_kart_object:
-                    correct_statement = f"{center_kart_object['kart_name']} is the ego car."
-            elif chosen_type == "num_karts":
-                correct_statement = f"There are {len(kart_objects)} karts in the scene."
-            elif chosen_type == "track_name":
-                correct_statement = f"The track is {track_name}."
-            elif chosen_type in ["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"]:
-                valid_karts = []
-                for kart in other_karts:
-                    kart_x, kart_y = kart['center']
-                    ego_x, ego_y = center_kart_object['center']
-                    if chosen_type == "front_of_ego" and kart_y < ego_y:
-                        valid_karts.append(kart)
-                    elif chosen_type == "behind_ego" and kart_y > ego_y:
-                        valid_karts.append(kart)
-                    elif chosen_type == "right_of_ego" and kart_x > ego_x:
-                        valid_karts.append(kart)
-                    elif chosen_type == "left_of_ego" and kart_x < ego_x:
-                        valid_karts.append(kart)
-
-                if valid_karts:
-                    target_kart = random.choice(valid_karts)
-                    relative_pos_map = {
-                        "front_of_ego": "in front of",
-                        "behind_ego": "behind",
-                        "right_of_ego": "right of",
-                        "left_of_ego": "left of"
-                    }
-                    correct_statement = f"{target_kart['kart_name']} is {relative_pos_map[chosen_type]} the ego car."
-
-    info_path_obj = Path(info_path)
-    base_name = info_path_obj.stem.replace("_info", "")
-    image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
-
-    return {
-        "image_file": image_file_path,
-        "caption": correct_statement
-    }
-
-def generate_train_caption_data(data_folder: str):
-    """
-    Generates training caption data (image_file, caption) for all info files
-    in a given folder and saves them to a single JSON file,
-    matching the format of example_captions.json.
-
-    Args:
-        data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
-        output_file (str): The name of the output JSON file (e.g., 'generated_train_captions.json').
-    """
-    #def generate_train_caption_data(data_folder: str):
-    """
-    Generates training caption data (image_file, caption) for all info files
-    in a given folder and saves them to a single JSON file,
-    matching the format of example_captions.json.
-
-    Args:
-        data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
-        output_file (str): The name of the output JSON file (e.g., 'generated_train_captions.json').
-    """
-    folder_path = Path(data_folder)
-    info_files = list(folder_path.glob("*_info.json"))
-
-    if not info_files:
-        print(f"No info.json files found in '{data_folder}'.")
-        return
-
-    for info_file in info_files:
-        print(f"Processing {info_file} for training captions...")
-        try:
-            with open(info_file, 'r') as f:
-                info_data = json.load(f)
-
-            # Define the output file name for this specific info_file
-            output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
-            output_path = folder_path / output_file_name
-
-            if "detections" not in info_data:
-                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
-                continue
-
-            current_info_train_captions_data = []
-            for view_index in range(len(info_data["detections"])):
-                # Use the helper function for single caption entries (training format)
-                for _ in range(3):  # Generate 3 captions for each view_index
-                    caption_entry = _generate_single_caption_entry(str(info_file), view_index)
-                    current_info_train_captions_data.append(caption_entry)
-
-            with open(output_path, 'w') as f:
-                json.dump(current_info_train_captions_data, f, indent=2)
-
-            print(f"Successfully generated {len(current_info_train_captions_data)} training caption entries and saved to {output_path}")
-
-        except Exception as e:
-            print(f"Error processing {info_file}: {e}")
-
-def generate_all_mc_qas_file(data_folder: str, output_file: str = "all_mc_qas.json"):
-    """
-    Generates (image_file, candidates, correct_index) pairs for all info files in a given folder
-    and saves them to a single JSON file (e.g., all_mc_qas.json).
-    This function is for generating QA-style data for validation/testing.
-
-    Args:
-        data_folder (str): Path to the folder containing info.json files (e.g., 'data/valid').
-        output_file (str): The name of the output JSON file (e.g., 'all_mc_qas.json').
-    """
-    folder_path = Path(data_folder)
-    info_files = list(folder_path.glob("*_info.json"))
-
-    if not info_files:
-        print(f"No info.json files found in '{data_folder}'.")
-        return
-
-    all_qa_data = []
-    for info_file in info_files:
-        print(f"Processing {info_file} for QA captions...")
-        try:
-            with open(info_file, 'r') as f:
-                info_data = json.load(f)
-
-            if "detections" not in info_data:
-                print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
-                continue
-
-            for view_index in range(len(info_data["detections"])):
-                # Use the original generate_caption for QA format
-                qa_entry = generate_caption(str(info_file), view_index)
-                all_qa_data.append(qa_entry)
-
-        except Exception as e:
-            print(f"Error processing {info_file}: {e}")
-
-    output_path = folder_path / output_file
-    with open(output_path, 'w') as f:
-        json.dump(all_qa_data, f, indent=2)
-
-    print(f"Successfully generated {len(all_qa_data)} QA entries and saved to {output_path}")
-
-def count_training_captions(data_folder: str) -> int:
-    """
-    Counts the total number of caption pairs across all *_captions.json files
-    in a given training data folder.
-
-    Args:
-        data_folder (str): The path to the training data folder (e.g., 'data/train').
-
-    Returns:
-        The total number of caption pairs, or 0 if no files are found or an error occurs.
-    """
-    folder_path = Path(data_folder)
-    caption_files = list(folder_path.glob("*_captions.json"))
-
-    if not caption_files:
-        print(f"No caption files found in '{data_folder}'.")
-        return 0
-
-    total_count = 0
-    for file_path in caption_files:
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    total_count += len(data)
-                else:
-                    print(f"Warning: The file '{file_path}' does not contain a list. Skipping.")
-        except json.JSONDecodeError:
-            print(f"Error: Failed to decode JSON from '{file_path}'. Skipping.")
-        except Exception as e:
-            print(f"An unexpected error occurred while processing '{file_path}': {e}")
-
-    return total_count
-
-def generate_correct_caption(info_path: str, view_index: int) -> str:
-    """
-    Generates a single, correct caption by randomly selecting one of the three
-    specified question types: ego car, counting, or track name.
-    """
-    try:
-        with open(info_path, 'r') as f:
-            info_data = json.load(f)
-    except FileNotFoundError:
-        return "Error: Info file not found."
-
-    track_name = info_data.get('track', 'Unknown Track')
-    kart_objects = extract_kart_objects(info_path, view_index, img_width=1280, img_height=720, min_box_size=10)
-
-    # List of possible correct statements based on your input
-    correct_statements = []
-
-    # 1. Ego car statement
-    center_kart_object = next((k for k in kart_objects if k.get('is_center_kart')), None)
-    if center_kart_object:
-        correct_statements.append(f"{center_kart_object['kart_name']} is the ego car.")
-
-    # 2. Counting statement
-    correct_statements.append(f"There are {len(kart_objects)} karts in the scenario.")
-
-    # 3. Track name statement
-    if track_name and track_name != 'Unknown Track':
-        correct_statements.append(f"The track is {track_name}.")
-
-    # Randomly choose one correct statement
-    if correct_statements:
-        return random.choice(correct_statements)
-    else:
-        return "No information available."
+# def _generate_single_caption_entry(info_path: str, view_index: int) -> dict:
+#     """
+#     Helper function to generate a single caption entry (image_file, caption)
+#     for a given info file and view index, matching the example_captions.json format.
+#     """
+#     try:
+#         with open(info_path, 'r') as f:
+#             info_data = json.load(f)
+#     except FileNotFoundError:
+#         return {"image_file": "", "caption": "Error: Info file not found."}
+#
+#     track_name = info_data.get('track', 'Unknown Track')
+#     kart_objects = extract_kart_objects(info_path, view_index, img_width=ORIGINAL_WIDTH, img_height=ORIGINAL_HEIGHT, min_box_size=10)
+#
+#     correct_statement = ""
+#     # Ensure a caption is always generated
+#     while correct_statement == "":
+#         caption_type_choices = []
+#         center_kart_object = next((k for k in kart_objects if k['is_center_kart']), None)
+#         other_karts = [k for k in kart_objects if not k['is_center_kart']]
+#
+#         if center_kart_object:
+#             caption_type_choices.append("ego_car")
+#         if kart_objects:
+#             caption_type_choices.append("num_karts")
+#         caption_type_choices.append("track_name")
+#         if center_kart_object and other_karts:
+#             caption_type_choices.extend(["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"])
+#
+#         if not caption_type_choices:
+#             correct_statement = "A scene from the game."
+#         else:
+#             chosen_type = random.choice(caption_type_choices)
+#
+#             if chosen_type == "ego_car":
+#                 if center_kart_object:
+#                     correct_statement = f"{center_kart_object['kart_name']} is the ego car."
+#             elif chosen_type == "num_karts":
+#                 correct_statement = f"There are {len(kart_objects)} karts in the scene."
+#             elif chosen_type == "track_name":
+#                 correct_statement = f"The track is {track_name}."
+#             elif chosen_type in ["front_of_ego", "behind_ego", "right_of_ego", "left_of_ego"]:
+#                 valid_karts = []
+#                 for kart in other_karts:
+#                     kart_x, kart_y = kart['center']
+#                     ego_x, ego_y = center_kart_object['center']
+#                     if chosen_type == "front_of_ego" and kart_y < ego_y:
+#                         valid_karts.append(kart)
+#                     elif chosen_type == "behind_ego" and kart_y > ego_y:
+#                         valid_karts.append(kart)
+#                     elif chosen_type == "right_of_ego" and kart_x > ego_x:
+#                         valid_karts.append(kart)
+#                     elif chosen_type == "left_of_ego" and kart_x < ego_x:
+#                         valid_karts.append(kart)
+#
+#                 if valid_karts:
+#                     target_kart = random.choice(valid_karts)
+#                     relative_pos_map = {
+#                         "front_of_ego": "in front of",
+#                         "behind_ego": "behind",
+#                         "right_of_ego": "right of",
+#                         "left_of_ego": "left of"
+#                     }
+#                     correct_statement = f"{target_kart['kart_name']} is {relative_pos_map[chosen_type]} the ego car."
+#
+#     info_path_obj = Path(info_path)
+#     base_name = info_path_obj.stem.replace("_info", "")
+#     image_file_path = f"{info_path_obj.parent.name}/{base_name}_{view_index:02d}_im.jpg"
+#
+#     return {
+#         "image_file": image_file_path,
+#         "caption": correct_statement
+#     }
+#
+# def generate_train_caption_data(data_folder: str):
+#     """
+#     Generates training caption data (image_file, caption) for all info files
+#     in a given folder and saves them to a single JSON file,
+#     matching the format of example_captions.json.
+#
+#     Args:
+#         data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
+#         output_file (str): The name of the output JSON file (e.g., 'generated_train_captions.json').
+#     """
+#     #def generate_train_caption_data(data_folder: str):
+#     """
+#     Generates training caption data (image_file, caption) for all info files
+#     in a given folder and saves them to a single JSON file,
+#     matching the format of example_captions.json.
+#
+#     Args:
+#         data_folder (str): Path to the folder containing info.json files (e.g., 'data/train').
+#         output_file (str): The name of the output JSON file (e.g., 'generated_train_captions.json').
+#     """
+#     folder_path = Path(data_folder)
+#     info_files = list(folder_path.glob("*_info.json"))
+#
+#     if not info_files:
+#         print(f"No info.json files found in '{data_folder}'.")
+#         return
+#
+#     for info_file in info_files:
+#         print(f"Processing {info_file} for training captions...")
+#         try:
+#             with open(info_file, 'r') as f:
+#                 info_data = json.load(f)
+#
+#             # Define the output file name for this specific info_file
+#             output_file_name = f"{info_file.stem.replace('_info', '')}_captions.json"
+#             output_path = folder_path / output_file_name
+#
+#             if "detections" not in info_data:
+#                 print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+#                 continue
+#
+#             current_info_train_captions_data = []
+#             for view_index in range(len(info_data["detections"])):
+#                 # Use the helper function for single caption entries (training format)
+#                 for _ in range(3):  # Generate 3 captions for each view_index
+#                     caption_entry = _generate_single_caption_entry(str(info_file), view_index)
+#                     current_info_train_captions_data.append(caption_entry)
+#
+#             with open(output_path, 'w') as f:
+#                 json.dump(current_info_train_captions_data, f, indent=2)
+#
+#             print(f"Successfully generated {len(current_info_train_captions_data)} training caption entries and saved to {output_path}")
+#
+#         except Exception as e:
+#             print(f"Error processing {info_file}: {e}")
+#
+# def generate_all_mc_qas_file(data_folder: str, output_file: str = "all_mc_qas.json"):
+#     """
+#     Generates (image_file, candidates, correct_index) pairs for all info files in a given folder
+#     and saves them to a single JSON file (e.g., all_mc_qas.json).
+#     This function is for generating QA-style data for validation/testing.
+#
+#     Args:
+#         data_folder (str): Path to the folder containing info.json files (e.g., 'data/valid').
+#         output_file (str): The name of the output JSON file (e.g., 'all_mc_qas.json').
+#     """
+#     folder_path = Path(data_folder)
+#     info_files = list(folder_path.glob("*_info.json"))
+#
+#     if not info_files:
+#         print(f"No info.json files found in '{data_folder}'.")
+#         return
+#
+#     all_qa_data = []
+#     for info_file in info_files:
+#         print(f"Processing {info_file} for QA captions...")
+#         try:
+#             with open(info_file, 'r') as f:
+#                 info_data = json.load(f)
+#
+#             if "detections" not in info_data:
+#                 print(f"Warning: 'detections' key not found in {info_file}. Skipping.")
+#                 continue
+#
+#             for view_index in range(len(info_data["detections"])):
+#                 # Use the original generate_caption for QA format
+#                 qa_entry = generate_caption(str(info_file), view_index)
+#                 all_qa_data.append(qa_entry)
+#
+#         except Exception as e:
+#             print(f"Error processing {info_file}: {e}")
+#
+#     output_path = folder_path / output_file
+#     with open(output_path, 'w') as f:
+#         json.dump(all_qa_data, f, indent=2)
+#
+#     print(f"Successfully generated {len(all_qa_data)} QA entries and saved to {output_path}")
+#
+# def count_training_captions(data_folder: str) -> int:
+#     """
+#     Counts the total number of caption pairs across all *_captions.json files
+#     in a given training data folder.
+#
+#     Args:
+#         data_folder (str): The path to the training data folder (e.g., 'data/train').
+#
+#     Returns:
+#         The total number of caption pairs, or 0 if no files are found or an error occurs.
+#     """
+#     folder_path = Path(data_folder)
+#     caption_files = list(folder_path.glob("*_captions.json"))
+#
+#     if not caption_files:
+#         print(f"No caption files found in '{data_folder}'.")
+#         return 0
+#
+#     total_count = 0
+#     for file_path in caption_files:
+#         try:
+#             with open(file_path, 'r') as f:
+#                 data = json.load(f)
+#                 if isinstance(data, list):
+#                     total_count += len(data)
+#                 else:
+#                     print(f"Warning: The file '{file_path}' does not contain a list. Skipping.")
+#         except json.JSONDecodeError:
+#             print(f"Error: Failed to decode JSON from '{file_path}'. Skipping.")
+#         except Exception as e:
+#             print(f"An unexpected error occurred while processing '{file_path}': {e}")
+#
+#     return total_count
+#
+# def generate_correct_caption(info_path: str, view_index: int) -> str:
+#     """
+#     Generates a single, correct caption by randomly selecting one of the three
+#     specified question types: ego car, counting, or track name.
+#     """
+#     try:
+#         with open(info_path, 'r') as f:
+#             info_data = json.load(f)
+#     except FileNotFoundError:
+#         return "Error: Info file not found."
+#
+#     track_name = info_data.get('track', 'Unknown Track')
+#     kart_objects = extract_kart_objects(info_path, view_index, img_width=1280, img_height=720, min_box_size=10)
+#
+#     # List of possible correct statements based on your input
+#     correct_statements = []
+#
+#     # 1. Ego car statement
+#     center_kart_object = next((k for k in kart_objects if k.get('is_center_kart')), None)
+#     if center_kart_object:
+#         correct_statements.append(f"{center_kart_object['kart_name']} is the ego car.")
+#
+#     # 2. Counting statement
+#     correct_statements.append(f"There are {len(kart_objects)} karts in the scenario.")
+#
+#     # 3. Track name statement
+#     if track_name and track_name != 'Unknown Track':
+#         correct_statements.append(f"The track is {track_name}.")
+#
+#     # Randomly choose one correct statement
+#     if correct_statements:
+#         return random.choice(correct_statements)
+#     else:
+#         return "No information available."
 
 def generate_all_possible_correct_captions(info_path: str, view_index: int) -> list[str]:
     """
@@ -435,7 +435,7 @@ def generate_all_possible_correct_captions(info_path: str, view_index: int) -> l
         correct_statements.append(f"{center_kart_object['kart_name']} is the ego car.")
 
     # 2. Counting statement
-    correct_statements.append(f"There are {len(kart_objects)} karts in the scenario.")
+    correct_statements.append(f"There are {len(kart_objects)} karts in the scene.")
 
     # 3. Track name statement
     if track_name and track_name != 'unknown' and isinstance(track_name, str):
@@ -458,7 +458,8 @@ def generate_all_possible_correct_captions(info_path: str, view_index: int) -> l
                     y_pos = "in front of" if kart_y < ego_y else "behind"
 
                     # Ensure the caption is specific and names the karts
-                    correct_statements.append(f"{kart_name} is {y_pos} and {x_pos} the ego car.")
+                    correct_statements.append(f"{kart_name} is {y_pos} the ego car.")
+                    correct_statements.append(f"{kart_name} is {x_pos} the ego car.")
 
     return correct_statements
 
@@ -586,7 +587,7 @@ def generate_all_data(data_folder: str = "data/train"):
                     all_correct_captions = generate_all_possible_correct_captions(str(info_file), view_index)
 
                     # Generate three distinct captions for training data
-                    captions_to_add = random.sample(all_correct_captions, k=min(3, len(all_correct_captions)))
+                    captions_to_add = random.sample(all_correct_captions, k=min(5, len(all_correct_captions)))
 
                     # If there are less than 3 unique captions, repeat to fill the list
                     while len(captions_to_add) < 5:
@@ -628,7 +629,8 @@ def generate_all_data(data_folder: str = "data/train"):
 
 
 def main():
-    fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data,"generate_validation":generate_all_mc_qas_file,"count_training_captions":count_training_captions,"generate_all_data":generate_all_data})
+    # fire.Fire({"check": check_caption,"generate_caption":generate_train_caption_data,"generate_validation":generate_all_mc_qas_file,"count_training_captions":count_training_captions,"generate_all_data":generate_all_data})
+    fire.Fire({"check": check_caption,"generate_all_data":generate_all_data})
 
 
 if __name__ == "__main__":
