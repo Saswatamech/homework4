@@ -109,7 +109,9 @@ class CLIP(nn.Module):
         self.text_projection = nn.Linear(text_encoder.config.hidden_size, proj_dim)
 
         # Initialize temperature as a trainable parameter
-        self.temperature = nn.Parameter(torch.tensor(temperature))
+        #self.temperature = nn.Parameter(torch.tensor(temperature))
+        self.temperature = nn.Parameter(torch.tensor(torch.log(torch.tensor(1.0 / temperature))))
+
 
     # def encode_image(self, image: torch.Tensor) -> torch.Tensor:
     #     return self.vision_encoder(image)
@@ -315,7 +317,7 @@ def get_target_modules_for_lora(model: nn.Module) -> list[str]:
 def train(
         data_dir: Path | None = None,
         output_dir: str = "clip",
-        num_train_epochs: float = 1,
+        num_train_epochs: float = 0.5,
         per_device_train_batch_size: int = 64,
         gradient_accumulation_steps: int = 2,
         learning_rate: float = 5e-4,
