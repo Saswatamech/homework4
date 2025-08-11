@@ -95,7 +95,7 @@ class CaptionDatasetForTraining(Dataset):
 
 class CLIP(nn.Module):
     def __init__(
-            self, vision_encoder: nn.Module, text_encoder: nn.Module, proj_dim: int = 64, temperature: float = 0.07
+            self, vision_encoder: nn.Module, text_encoder: nn.Module, proj_dim: int = 256, temperature: float = 0.07
     ):
         super().__init__()
         self.vision_encoder = vision_encoder
@@ -316,8 +316,8 @@ def train(
         data_dir: Path | None = None,
         output_dir: str = "clip",
         num_train_epochs: float = 1,
-        per_device_train_batch_size: int = 1024,
-        gradient_accumulation_steps: int = 1,
+        per_device_train_batch_size: int = 64,
+        gradient_accumulation_steps: int = 2,
         learning_rate: float = 5e-4,
         num_workers: int = 16,
 ):
@@ -340,7 +340,7 @@ def train(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        r=8,
+        r=4,
         lora_alpha=32,
         lora_dropout=0.0,
         # target_modules="all-linear",
@@ -399,7 +399,7 @@ def demo_train():
     train(
         train_dataset_name="train_demo",
         output_dir="demo_clip",
-        num_train_epochs=1,
+        num_train_epochs=0.1,
         per_device_train_batch_size=2,
         num_workers=1,
         gradient_accumulation_steps=1,

@@ -587,10 +587,10 @@ def generate_all_data(data_folder: str = "data/train"):
                     all_correct_captions = generate_all_possible_correct_captions(str(info_file), view_index)
 
                     # Generate three distinct captions for training data
-                    captions_to_add = random.sample(all_correct_captions, k=min(8, len(all_correct_captions)))
+                    captions_to_add = random.sample(all_correct_captions, k=min(10, len(all_correct_captions)))
 
                     # If there are less than 3 unique captions, repeat to fill the list
-                    while len(captions_to_add) < 8:
+                    while len(captions_to_add) < 10:
                         captions_to_add.append(random.choice(all_correct_captions))
 
                     for caption in captions_to_add:
